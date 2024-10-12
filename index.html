@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功能计算器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+        .input-field {
+            margin-bottom: 10px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        input[type="number"] {
+            width: 100px;
+        }
+        #result {
+            margin-top: 20px;
+            font-weight: bold;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            width: fit-content;
+        }
+        #history {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background-color: #f1f1f1;
+        }
+        #history ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.17.0/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body>
+
+    <div>
+        <h2>计算起皱月数/M (CL_MAL_Guo F)</h2>
+        <div class="input-field">
+            <label for="xValue">保液量/g:</label>
+            <input type="number" id="xValue" step="any" min="0" max="10" required>
+            <small>范围: 0-10</small>
+        </div>
+        <div class="input-field">
+            <label for="yValue">起皱概率:</label>
+            <input type="number" id="yValue" step="any" min="0" max="1" required>
+            <small>范围: 0-1</small>
+        </div>
+        <button onclick="calculateSingle()">计算 M</button>
+        <div id="result"></div>
+        <div id="history">
+            <h3>历史计算结果</h3>
+            <ul id="historyList"></ul>
+        </div>
+    </div>
+
+    <div>
+        <h2>批量数据处理</h2>
+        <input type="file" id="fileInput" accept=".xlsx">
+        <button onclick="processFile()">处理文件</button>
+    </div>
+
+    <script>
+        function calculateSingle() {
+            var x = parseFloat(document.getElementById('xValue').value);
+            var y = parseFloat(document.getElementById('yValue').value);
+
+            if (isNaN(x) || isNaN(y) || x < 0 || x > 10 || y < 0 || y > 1) {
+                document.getElementById('result').innerText = '请输入有效范围内的数字';
+                return;
+            }
+
+            var z = calculateZ(x, y);
+
+            document.getElementById('result').innerText = '起皱月数 M: ' + z;
+
+            var historyList = document.getElementById('historyList');
+            var listItem = document.createElement('li');
+            listItem.textContent = `保液量/g: ${x}, 起皱概率: ${y}, 起皱月数 M: ${z}`;
+            historyList.appendChild(listItem);
+        }
+
+        function calculateZ(x, y) {
+            var a = 0.01089 - y * 0.00532;
+            var b = -0.1156 - y * (-0.23686) + (-0.0032) * x - y * 0.01712 * x;
+            var c = -0.46947 + 0.16601 * x - y - y * 0.16846 * x - y * (-0.01654) * x * x;
+            var discriminant = b * b - 4 * a * c;
+
+            if (discriminant < 0) {
+                return '无解';
+            }
+            var z = (-b + Math.sqrt(discriminant)) / (2 * a);
+            return z.toFixed(1);
+        }
+
+        function processFile() {
+            var input = document.getElementById('fileInput');
+            if (!input.files.length) {
+                alert("请选择一个Excel文件");
+                return;
+            }
+
+            var reader = new FileReader();
+            reader.onload = function(event) {
+                var data = new Uint8Array(event.target.result);
+                var workbook = XLSX.read(data, { type: 'array' });
+                var sheet = workbook.Sheets[workbook.SheetNames[0]];
+                var rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                for (var i = 0; i < rows.length; i++) {
+                    var x = rows[i][0];
+                    var y = rows[i][1];
+                    if (typeof x === 'number' && x >= 0 && x <= 10 && typeof y === 'number' && y >= 0 && y <= 1) {
+                        var z = calculateZ(x, y);
+                        rows[i][2] = z;
+                    } else {
+                        rows[i][2] = '无效输入';
+                    }
+                }
+
+                var newSheet = XLSX.utils.aoa_to_sheet(rows);
+                var newWorkbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(newWorkbook, newSheet, '结果');
+
+                var wbout = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
+                saveAs(new Blob([wbout], { type: "application/octet-stream" }), '结果.xlsx');
+            };
+            reader.readAsArrayBuffer(input.files[0]);
+        }
+    </script>
+
+</body>
+</html>
